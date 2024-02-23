@@ -4,7 +4,13 @@ import click
 import pyotp
 import qrcode
 
-ACCOUNTS = json.load(open("/home/akelly/.tfa"))
+
+TFA_STORAGE = "/home/akelly/.tfa"
+ACCOUNTS = json.load(open(TFA_STORAGE, "r"))
+
+
+def save_accounts(accounts):
+    json.dump(ACCOUNTS, open(TFA_STORAGE, "w"))
 
 
 @click.group()
@@ -39,14 +45,14 @@ def account():
 @click.argument("key")
 def add_account(name, issuer, key):
     ACCOUNTS[name] = {"issuer": issuer, "key": key}
-    json.dump(ACCOUNTS, open("/home/akelly/.tfa", "w"))
+    save_accounts(ACCOUNTS)
 
 
 @account.command(help="Remove an account.", name="remove")
 @click.argument("name")
 def remove_account(name):
     ACCOUNTS.pop(name, None)
-    json.dump(ACCOUNTS, open("/home/akelly/.tfa", "w"))
+    save_accounts(ACCOUNTS)
 
 
 @account.command(help="List all accounts.", name="list")
