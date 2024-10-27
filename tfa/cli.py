@@ -3,6 +3,7 @@ import sys
 import click
 import pyotp
 import qrcode
+import binascii
 
 from . import storage
 
@@ -38,8 +39,13 @@ def add_account(account_name, secret_key, issuer=None, force=False):
     if issuer in accounts and not force:
         click.echo(f"Account {issuer!r} already exists. Use --force to overwrite.")
         sys.exit(1)
-    initial_code = pyotp.TOTP(secret_key).now()
-    click.echo(f"{account_name}: { initial_code }")
+    try:
+        initial_code = pyotp.TOTP(secret_key).now()
+        click.echo(f"{account_name}: { initial_code }")
+    except binascii.Error as error:
+        click.echo(f"Invalid secret key: {error}")
+        sys.exit(1)
+
     accounts[account_name] = {"issuer": issuer, "key": secret_key}
     storage.save_accounts(accounts)
 
