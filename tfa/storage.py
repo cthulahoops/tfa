@@ -13,7 +13,7 @@ def get_keyfile():
     return Path(keyfile)
 
 
-def get_storage():
+def get_accounts():
     keyfile = os.environ.get("TFA_STORAGE")
     if not keyfile:
         click.echo("Please define a TFA_STORAGE an envionment variable.")
@@ -28,7 +28,7 @@ def get_storage():
 
 
 def get_account(account_name):
-    accounts = get_storage()
+    accounts = get_accounts()
     try:
         return accounts[account_name]
     except KeyError:

@@ -31,7 +31,7 @@ def account():
 )
 def add_account(account_name, secret_key, issuer=None):
     issuer = issuer or account_name
-    accounts = storage.get_storage()
+    accounts = storage.get_accounts()
     accounts[account_name] = {"issuer": issuer, "key": secret_key}
     storage.save_accounts(accounts)
 
@@ -39,14 +39,14 @@ def add_account(account_name, secret_key, issuer=None):
 @account.command(help="Remove an account.", name="remove")
 @click.argument("name")
 def remove_account(name):
-    accounts = storage.get_storage()
+    accounts = storage.get_accounts()
     accounts.pop(name, None)
     storage.save_accounts(accounts)
 
 
 @account.command(help="List all accounts.", name="list")
 def list_accounts():
-    for name in storage.get_storage():
+    for name in storage.get_accounts():
         print(name)
 
 
