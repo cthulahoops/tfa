@@ -1,2 +1,4 @@
 dist
 .envrc
+__pycache__
+.dat
