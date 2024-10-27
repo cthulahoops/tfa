@@ -34,6 +34,9 @@ def account():
 def add_account(account_name, secret_key, issuer=None):
     issuer = issuer or account_name
     accounts = storage.get_accounts()
+    if issuer in accounts:
+        click.echo(f"Account {issuer!r} already exists")
+        sys.exit(1)
     initial_code = pyotp.TOTP(secret_key).now()
     click.echo(f"{account_name}: { initial_code }")
     accounts[account_name] = {"issuer": issuer, "key": secret_key}
