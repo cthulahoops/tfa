@@ -1,3 +1,5 @@
+import sys
+
 import click
 import pyotp
 import qrcode
@@ -42,14 +44,18 @@ def add_account(account_name, secret_key, issuer=None):
 @click.argument("name")
 def remove_account(name):
     accounts = storage.get_accounts()
-    accounts.pop(name, None)
+    try:
+        accounts.pop(name)
+    except KeyError:
+        click.echo(f"Account {name!r} does not exist.")
+        sys.exit(1)
     storage.save_accounts(accounts)
 
 
 @account.command(help="List all accounts.", name="list")
 def list_accounts():
     for name in storage.get_accounts():
-        print(name)
+        click.echo(name)
 
 
 @cli.command(help="Display a QR code for an account.")
