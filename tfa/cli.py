@@ -31,11 +31,12 @@ def account():
 @click.option(
     "--issuer",
 )
-def add_account(account_name, secret_key, issuer=None):
+@click.option("--force", "-f", is_flag=True)
+def add_account(account_name, secret_key, issuer=None, force=False):
     issuer = issuer or account_name
     accounts = storage.get_accounts()
-    if issuer in accounts:
-        click.echo(f"Account {issuer!r} already exists")
+    if issuer in accounts and not force:
+        click.echo(f"Account {issuer!r} already exists. Use --force to overwrite.")
         sys.exit(1)
     initial_code = pyotp.TOTP(secret_key).now()
     click.echo(f"{account_name}: { initial_code }")
