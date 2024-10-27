@@ -15,7 +15,7 @@ def cli():
 def code(account):
     account = storage.get_account(account)
     totp = pyotp.TOTP(account["key"])
-    print(f"{account['issuer']}: {totp.now()}")
+    click.echo(f"{account['issuer']}: {totp.now()}")
 
 
 @cli.group(help="Manage accounts.")
@@ -32,6 +32,8 @@ def account():
 def add_account(account_name, secret_key, issuer=None):
     issuer = issuer or account_name
     accounts = storage.get_accounts()
+    initial_code = pyotp.TOTP(secret_key).now()
+    click.echo(f"{account_name}: { initial_code }")
     accounts[account_name] = {"issuer": issuer, "key": secret_key}
     storage.save_accounts(accounts)
 
