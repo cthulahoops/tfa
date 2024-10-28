@@ -14,12 +14,7 @@ def get_keyfile():
 
 
 def get_accounts():
-    keyfile = os.environ.get("TFA_STORAGE")
-    if not keyfile:
-        click.echo("Please define a TFA_STORAGE an envionment variable.")
-        exit()
-
-    keypath = Path(keyfile)
+    keypath = get_keyfile()
 
     if not keypath.exists():
         return {}
