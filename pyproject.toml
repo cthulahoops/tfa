@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "two-f-all"
+name = "tfa"
 version = "0.1.0"
 description = ""
 authors = ["Adam Kelly <adam@cthulahoops.org>"]
