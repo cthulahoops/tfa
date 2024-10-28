@@ -1,7 +1,39 @@
 import os
 from pathlib import Path
 import json
-import sys
+import click
+
+
+class AccountStorage:
+    def __init__(self, keyfile=None):
+        self.keyfile = keyfile or get_keyfile()
+        self.accounts = self._get_accounts()
+
+    def _get_accounts(self):
+        if not self.keyfile.exists():
+            return {}
+
+        return json.load(self.keyfile.open("r"))
+
+    def _save_accounts(self):
+        json.dump(self.accounts, self.keyfile.open("w"))
+
+    def __getitem__(self, account_name):
+        return self.accounts[account_name]
+
+    def __setitem__(self, account_name, account):
+        self.accounts[account_name] = account
+        self._save_accounts()
+
+    def __contains__(self, account_name):
+        return account_name in self.accounts
+
+    def __delitem__(self, account_name):
+        del self.accounts[account_name]
+        self._save_accounts()
+
+    def __iter__(self):
+        return iter(self.accounts)
 
 
 def get_keyfile():
@@ -11,30 +43,3 @@ def get_keyfile():
         exit()
 
     return Path(keyfile)
-
-
-def get_accounts():
-    keypath = get_keyfile()
-
-    if not keypath.exists():
-        return {}
-
-    return json.load(keypath.open("r"))
-
-
-def get_account(account_name):
-    accounts = get_accounts()
-    try:
-        return accounts[account_name]
-    except KeyError:
-        click.echo(
-            f"Account {account_name!r} not found. Available accounts:",
-            err=True,
-        )
-        for account in accounts:
-            print(account)
-        sys.exit(1)
-
-
-def save_accounts(accounts):
-    json.dump(accounts, get_keyfile().open("w"))

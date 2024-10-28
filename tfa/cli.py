@@ -5,7 +5,7 @@ import pyotp
 import qrcode
 import binascii
 
-from . import storage
+from .storage import AccountStorage
 
 
 @click.group()
@@ -14,9 +14,14 @@ def cli():
 
 
 @cli.command(help="Show a TOTP code for a given account.")
-@click.argument("account")
-def code(account):
-    account = storage.get_account(account)
+@click.argument("account_name")
+def code(account_name):
+    storage = AccountStorage()
+    try:
+        account = storage[account_name]
+    except KeyError:
+        click.echo(f"Account {account_name!r} does not exist.")
+        sys.exit(1)
     totp = pyotp.TOTP(account["key"])
     click.echo(f"{account['issuer']}: {totp.now()}")
 
@@ -35,7 +40,7 @@ def account():
 @click.option("--force", "-f", is_flag=True)
 def add_account(account_name, secret_key, issuer=None, force=False):
     issuer = issuer or account_name
-    accounts = storage.get_accounts()
+    accounts = AccountStorage()
     if issuer in accounts and not force:
         click.echo(f"Account {issuer!r} already exists. Use --force to overwrite.")
         sys.exit(1)
@@ -47,31 +52,34 @@ def add_account(account_name, secret_key, issuer=None, force=False):
         sys.exit(1)
 
     accounts[account_name] = {"issuer": issuer, "key": secret_key}
-    storage.save_accounts(accounts)
 
 
 @account.command(help="Remove an account.", name="remove")
-@click.argument("name")
-def remove_account(name):
-    accounts = storage.get_accounts()
+@click.argument("account_name")
+def remove_account(account_name):
+    accounts = AccountStorage()
     try:
-        accounts.pop(name)
+        del accounts[account_name]
     except KeyError:
-        click.echo(f"Account {name!r} does not exist.")
+        click.echo(f"Account {account_name!r} does not exist.")
         sys.exit(1)
-    storage.save_accounts(accounts)
 
 
 @account.command(help="List all accounts.", name="list")
 def list_accounts():
-    for name in storage.get_accounts():
+    for name in AccountStorage():
         click.echo(name)
 
 
 @cli.command(help="Display a QR code for an account.")
-@click.argument("account")
-def qr(account):
-    account = storage.get_account(account)
+@click.argument("account_name")
+def qr(account_name):
+    storage = AccountStorage()
+    try:
+        account = storage[account_name]
+    except KeyError:
+        click.echo(f"Account {account_name!r} does not exist.")
+        sys.exit(1)
 
     totp = pyotp.TOTP(account["key"])
     url = totp.provisioning_uri(issuer_name=account["issuer"])
