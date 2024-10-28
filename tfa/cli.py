@@ -26,12 +26,7 @@ def code(account_name):
     click.echo(f"{account['issuer']}: {totp.now()}")
 
 
-@cli.group(help="Manage accounts.")
-def account():
-    pass
-
-
-@account.command(help="Add a new account.", name="add")
+@cli.command(help="Add a new account.", name="add")
 @click.argument("account_name")
 @click.argument("secret_key")
 @click.option(
@@ -54,7 +49,7 @@ def add_account(account_name, secret_key, issuer=None, force=False):
     accounts[account_name] = {"issuer": issuer, "key": secret_key}
 
 
-@account.command(help="Remove an account.", name="remove")
+@cli.command(help="Remove an account.", name="remove")
 @click.argument("account_name")
 def remove_account(account_name):
     accounts = AccountStorage()
@@ -65,7 +60,7 @@ def remove_account(account_name):
         sys.exit(1)
 
 
-@account.command(help="List all accounts.", name="list")
+@cli.command(help="List all accounts.", name="list")
 def list_accounts():
     for name in AccountStorage():
         click.echo(name)
