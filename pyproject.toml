@@ -1,10 +1,11 @@
 [tool.poetry]
 name = "tfa"
-version = "0.1.0"
+version = "0.2.0"
 description = ""
 authors = ["Adam Kelly <adam@cthulahoops.org>"]
 readme = "README.md"
 packages = [{include = "tfa"}]
+license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.10"
