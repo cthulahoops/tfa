@@ -1,27 +1,32 @@
-[tool.poetry]
+[tool.pdm.build]
+includes = ["tfa"]
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[project]
+authors = [
+    {name = "Adam Kelly", email = "adam@cthulahoops.org"},
+]
+license = {text = "MIT"}
+requires-python = "<4.0,>=3.10"
+dependencies = [
+    "pyotp<3.0.0,>=2.9.0",
+    "click<9.0.0,>=8.1.7",
+    "qrcode<8.0.0,>=7.4.2",
+    "sqlite-utils<4.0,>=3.38",
+]
 name = "tfa"
 version = "0.3.0"
 description = "A command-line tool for managing two-factor authentication (2FA) TOTP codes."
-authors = ["Adam Kelly <adam@cthulahoops.org>"]
 readme = "README.md"
-packages = [{include = "tfa"}]
-license = "MIT"
 
-[tool.poetry.dependencies]
-python = "^3.10"
-pyotp = "^2.9.0"
-click = "^8.1.7"
-qrcode = "^7.4.2"
-sqlite-utils = "^3.38"
-
-[tool.poetry.group.dev.dependencies]
-black = "^23.9.1"
-ruff = "^0.0.290"
-pytest = "^8.3.3"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
-
-[tool.poetry.scripts]
+[project.scripts]
 tfa = "tfa.cli:cli"
+
+[dependency-groups]
+dev = [
+    "black<24.0.0,>=23.9.1",
+    "ruff<1.0.0,>=0.0.290",
+    "pytest<9.0.0,>=8.3.3",
+]
