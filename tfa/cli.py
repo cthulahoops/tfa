@@ -1,9 +1,11 @@
-import sys
-
+import binascii
 import click
+import json
 import pyotp
 import qrcode
-import binascii
+import sys
+
+from pathlib import Path
 
 from .storage import AccountStorage
 from importlib.metadata import version
@@ -92,6 +94,104 @@ def qr(account_name):
     qr = qrcode.QRCode()
     qr.add_data(url)
     qr.print_ascii()
+
+
+@cli.command(help="Import accounts from a JSON file.", name="import")
+@click.argument(
+    "json_file", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+)
+@click.option("--force", "-f", is_flag=True, help="Overwrite existing accounts")
+def import_accounts(json_file, force):
+    """Import accounts from a JSON file into the TFA database."""
+    try:
+        with json_file.open("r") as f:
+            json_accounts = json.load(f)
+
+        storage = AccountStorage()
+
+        imported = 0
+        skipped = 0
+
+        for name, details in json_accounts.items():
+            if name in storage and not force:
+                click.echo(f"Skipping existing account: {name}")
+                skipped += 1
+                continue
+
+            # Validate the account data
+            if not isinstance(details, dict) or "key" not in details:
+                click.echo(f"Skipping invalid account data for: {name}")
+                skipped += 1
+                continue
+
+            if "issuer" not in details:
+                details["issuer"] = name
+
+            try:
+                pyotp.TOTP(details["key"]).now()
+            except binascii.Error as e:
+                click.echo(f"Skipping account with invalid key: {name} ({e})")
+                skipped += 1
+                continue
+
+            storage[name] = details
+            imported += 1
+
+        click.echo(f"Import complete: {imported} accounts imported, {skipped} skipped.")
+
+    except json.JSONDecodeError:
+        click.echo(f"Error: {json_file} is not a valid JSON file.", err=True)
+        sys.exit(1)
+    except PermissionError:
+        click.echo(f"Error: Permission denied when reading {json_file}", err=True)
+        sys.exit(1)
+    except FileNotFoundError:
+        click.echo(f"Error: File {json_file} not found", err=True)
+        sys.exit(1)
+    except IOError as e:
+        click.echo(f"I/O error when reading {json_file}: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command(help="Export accounts to a JSON file or stdout.", name="export")
+@click.argument(
+    "json_file", type=click.Path(dir_okay=False, path_type=Path), required=False
+)
+@click.option("--force", "-f", is_flag=True, help="Overwrite existing file")
+def export_accounts(json_file, force):
+    """Export accounts from the TFA database to a JSON file or stdout."""
+    storage = AccountStorage()
+    accounts = {}
+
+    for name in storage:
+        accounts[name] = storage[name]
+
+    if not accounts:
+        click.echo("No accounts to export.")
+        return
+
+    if not json_file:
+        click.echo(json.dumps(accounts, indent=2))
+        return
+
+    if json_file.exists() and not force:
+        click.echo(
+            f"File {json_file} already exists. Use --force to overwrite.", err=True
+        )
+        sys.exit(1)
+
+    try:
+        with json_file.open("w") as f:
+            json.dump(accounts, f, indent=2)
+
+        click.echo(f"Successfully exported {len(accounts)} accounts to {json_file}")
+
+    except PermissionError:
+        click.echo(f"Error: Permission denied when writing to {json_file}", err=True)
+        sys.exit(1)
+    except IOError as e:
+        click.echo(f"I/O error when writing to {json_file}: {e}", err=True)
+        sys.exit(1)
 
 
 @cli.command(help="Show instructions for enabling shell completion")

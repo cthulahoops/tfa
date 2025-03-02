@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tfa"
-version = "0.2.2"
+version = "0.3.0"
 description = "A command-line tool for managing two-factor authentication (2FA) TOTP codes."
 authors = ["Adam Kelly <adam@cthulahoops.org>"]
 readme = "README.md"
@@ -12,6 +12,7 @@ python = "^3.10"
 pyotp = "^2.9.0"
 click = "^8.1.7"
 qrcode = "^7.4.2"
+sqlite-utils = "^3.38"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.9.1"
