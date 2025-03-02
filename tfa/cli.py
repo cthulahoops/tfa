@@ -6,6 +6,12 @@ import qrcode
 import binascii
 
 from .storage import AccountStorage
+from importlib.metadata import version
+
+try:
+    __version__ = version("tfa")
+except ImportError:
+    __version__ = "unknown"
 
 
 def complete_account_name(ctx, param, incomplete):
@@ -13,6 +19,7 @@ def complete_account_name(ctx, param, incomplete):
 
 
 @click.group()
+@click.version_option(version=__version__)
 def cli():
     pass
 
