@@ -39,7 +39,11 @@ class AccountStorage:
 def get_keyfile():
     keyfile = os.environ.get("TFA_STORAGE")
     if not keyfile:
-        click.echo("Please define a TFA_STORAGE an envionment variable.")
-        exit()
+        click.echo("Error: TFA_STORAGE environment variable not set.", err=True)
+        click.echo(
+            "Please set it to the path where you want to store your TOTP secrets:",
+            err=True,
+        )
+        click.echo("  export TFA_STORAGE=~/.config/tfa/accounts.json", err=True)
 
     return Path(keyfile)

@@ -8,18 +8,21 @@ A command-line tool for managing two-factor authentication (2FA) TOTP codes.
 * I don't keep my phone with me all the time.
 * I'm worried about losing access to my accounts if I lose my phone.
 
-I feel far more comfortable with TOTP codes now!
+This project succeeded in its main goal: I now have a good understanding of how TOTP codes
+work.
+
 
 ## Should you use this?
 
-Maybe? This probably isn't best practice for two factor authentication codes. The default
-assumption is that phones have better security than computers. Depending on how you manage
-passwords, and access to your e-mail someone with access to your computer probably has the ability
-to access your accounts.
+Maybe? Standard practice is to keep two-factor authentication codes on your phone, not your
+computer. This separation is intentional - if someone gains access to your computer, they
+still won't have your 2FA codes. By storing codes on your computer with this tool, you're
+reducing that security boundary. The security model assumes phones have better protection
+against unauthorised access than computers do.
 
-The secret database is not encrypted. It a simple json file that gets rewritten on every
-modification. It might lose your secrets. You should keep backups, and probably use the qr code
-feature to add accounts an authenticator app.
+The secret database is not encrypted. It's a simple json file that gets rewritten on every
+modification. It might lose your secrets. You should keep backups, and probably use the qr
+code feature to add accounts to an authenticator app.
 
 I'm also not a security expert. I'm just a programmer who wanted to understand TOTP. Maybe you
 should use a standard tool instead.
@@ -33,13 +36,14 @@ pip install tfa
 ```
 
 There is no default location for the database because the point is to make secret management
-less opaque than typical authentication apps. Set a preferred location in your shell configuration.
+less opaque than typical authentication apps. You must explicitly choose where to store your
+secrets by setting a path in your shell configuration:
 
 ```bash
-export TFA_STORAGE_PATH=~/.config/tfa/accounts.json
+export TFA_STORAGE=~/.config/tfa/accounts.json
 ```
 
-The secrets are stored in a simple json file with no encryption.
+If TFA_STORAGE is not set, the tool will display an error message and exit.
 
 ## Usage
 
