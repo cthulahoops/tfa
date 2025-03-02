@@ -31,6 +31,12 @@ Use at your own risk.
 ## Installation
 
 ```bash
+uv tool install tfa
+```
+
+or
+
+```bash
 pip install tfa
 ```
 
