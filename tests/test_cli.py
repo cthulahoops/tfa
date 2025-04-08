@@ -2,6 +2,7 @@ from click.testing import CliRunner
 from tfa.cli import cli
 
 import os
+import re
 
 
 os.environ["TFA_STORAGE"] = "./temp_test_accounts.json"
@@ -18,9 +19,7 @@ def test_add_account_success():
         list_result = runner.invoke(cli, ["list"])
         assert "testaccount" in list_result.output
         # The output should contain the account name and an initial TOTP code
-        assert "testaccount: " in result.output
-        # TOTP code is 6 digits
-        assert len(result.output.split()[-1]) == 6
+        assert re.match(r"\d{6}\n", result.output), result.output
 
 
 def test_add_account_invalid_key():
@@ -55,7 +54,7 @@ def test_add_duplicate_account_with_force():
         )
 
         assert result.exit_code == 0
-        assert "testaccount: " in result.output
+        assert re.match(r"\d{6}\n", result.output), result.output
 
 
 def test_add_account_with_custom_issuer():
@@ -68,7 +67,7 @@ def test_add_account_with_custom_issuer():
         assert result.exit_code == 0
         # Verify custom issuer by checking code output
         code_result = runner.invoke(cli, ["code", "testaccount"])
-        assert "Custom: " in code_result.output
+        assert re.match(r"\d{6}\n", code_result.output), code_result.output
 
 
 def test_code_existing_account():
@@ -80,11 +79,7 @@ def test_code_existing_account():
         result = runner.invoke(cli, ["code", "testaccount"])
 
         assert result.exit_code == 0
-        assert "testaccount: " in result.output
-        # Verify code format (6 digits)
-        code = result.output.split()[-1]
-        assert len(code) == 6
-        assert code.isdigit()
+        assert re.match(r"\d{6}\n", result.output), result.output
 
 
 def test_code_nonexistent_account():
@@ -107,8 +102,7 @@ def test_code_with_custom_issuer():
         result = runner.invoke(cli, ["code", "testaccount"])
 
         assert result.exit_code == 0
-        assert "Custom: " in result.output
-        assert len(result.output.split()[-1]) == 6
+        assert re.match(r"\d{6}\n", result.output), result.output
 
 
 def test_remove_existing_account():

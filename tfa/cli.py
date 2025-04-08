@@ -54,7 +54,7 @@ def add_account(account_name, secret_key, issuer=None, force=False):
         sys.exit(1)
     try:
         initial_code = pyotp.TOTP(secret_key).now()
-        click.echo(f"{account_name}: { initial_code }")
+        click.echo(f"{ initial_code }")
     except binascii.Error as error:
         click.echo(f"Invalid secret key: {error}")
         sys.exit(1)
