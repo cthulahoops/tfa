@@ -36,7 +36,7 @@ def code(account_name):
         click.echo(f"Account {account_name!r} does not exist.")
         sys.exit(1)
     totp = pyotp.TOTP(account["key"])
-    click.echo(f"{account['issuer']}: {totp.now()}")
+    click.echo(f"{totp.now()}")
 
 
 @cli.command(help="Add a new account.", name="add")
