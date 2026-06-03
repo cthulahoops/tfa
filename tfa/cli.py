@@ -96,16 +96,25 @@ def qr(account_name):
     qr.print_ascii()
 
 
-@cli.command(help="Import accounts from a JSON file.", name="import")
-@click.argument(
-    "json_file", type=click.Path(exists=True, dir_okay=False, path_type=Path)
+@cli.command(
+    help=(
+        "Import accounts from FILE, or from stdin when FILE is '-'. Adds accounts; "
+        "use --force to replace existing accounts."
+    ),
+    name="import",
 )
-@click.option("--force", "-f", is_flag=True, help="Overwrite existing accounts")
+@click.argument(
+    "json_file", metavar="FILE", type=click.Path(dir_okay=False, path_type=Path)
+)
+@click.option("--force", "-f", is_flag=True, help="Replace existing accounts")
 def import_accounts(json_file, force):
     """Import accounts from a JSON file into the TFA database."""
     try:
-        with json_file.open("r") as f:
-            json_accounts = json.load(f)
+        if str(json_file) == "-":
+            json_accounts = json.load(sys.stdin)
+        else:
+            with json_file.open("r") as f:
+                json_accounts = json.load(f)
 
         storage = AccountStorage()
 
@@ -153,9 +162,12 @@ def import_accounts(json_file, force):
         sys.exit(1)
 
 
-@cli.command(help="Export accounts to a JSON file or stdout.", name="export")
+@cli.command(
+    help="Export accounts to FILE, or to stdout when FILE is omitted or '-'.",
+    name="export",
+)
 @click.argument(
-    "json_file", type=click.Path(dir_okay=False, path_type=Path), required=False
+    "json_file", metavar="FILE", type=click.Path(dir_okay=False, path_type=Path), required=False
 )
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing file")
 def export_accounts(json_file, force):
@@ -170,7 +182,7 @@ def export_accounts(json_file, force):
         click.echo("No accounts to export.")
         return
 
-    if not json_file:
+    if not json_file or str(json_file) == "-":
         click.echo(json.dumps(accounts, indent=2))
         return
 

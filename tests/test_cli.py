@@ -1,6 +1,7 @@
 from click.testing import CliRunner
 from tfa.cli import cli
 
+import json
 import os
 import re
 
@@ -172,3 +173,31 @@ def test_qr_nonexistent_account():
 
         assert result.exit_code == 1
         assert "does not exist" in result.output
+
+
+def test_export_dash_writes_json_to_stdout():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(cli, ["add", "testaccount", "JBSWY3DPEHPK3PXP"])
+
+        result = runner.invoke(cli, ["export", "-"])
+
+        assert result.exit_code == 0
+        assert json.loads(result.output) == {
+            "testaccount": {"issuer": "testaccount", "key": "JBSWY3DPEHPK3PXP"}
+        }
+
+
+def test_import_dash_reads_json_from_stdin():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        payload = json.dumps(
+            {"testaccount": {"issuer": "testaccount", "key": "JBSWY3DPEHPK3PXP"}}
+        )
+
+        result = runner.invoke(cli, ["import", "-"], input=payload)
+
+        assert result.exit_code == 0
+        assert "Import complete: 1 accounts imported, 0 skipped." in result.output
+        list_result = runner.invoke(cli, ["list"])
+        assert "testaccount" in list_result.output

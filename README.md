@@ -103,20 +103,26 @@ tfa qr <account_name>
 Export accounts to JSON (useful for backups):
 
 ```bash
+# Export to stdout
+tfa export
+
 # Export to a file
 tfa export backup.json
 
-# Export to stdout
-tfa export
+# Explicitly export to stdout
+tfa export -
 ```
 
-Import accounts from JSON:
+Import accounts from JSON. Imports add to existing accounts; existing accounts are skipped unless `--force` is used:
 
 ```bash
-# Import accounts
+# Import accounts from a file
 tfa import backup.json
 
-# Force overwrite existing accounts
+# Import accounts from stdin
+tfa import -
+
+# Replace existing accounts with matching names
 tfa import backup.json --force
 ```
 
