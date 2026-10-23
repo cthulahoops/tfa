@@ -1,6 +1,7 @@
 import binascii
 import click
 import json
+import os
 import pyotp
 import qrcode
 import sys
@@ -16,20 +17,65 @@ except ImportError:
     __version__ = "unknown"
 
 
+def storage_option(function):
+    return click.option(
+        "--storage",
+        type=click.Path(dir_okay=False, path_type=Path),
+        help="Path to the account database. Overrides TFA_STORAGE.",
+    )(function)
+
+
+def get_storage_path(ctx, storage_path=None):
+    if storage_path is not None:
+        return storage_path
+
+    # Check the subcommand's --storage, then the group's. Uses params rather
+    # than ctx.obj because group callbacks don't run during shell completion.
+    while ctx is not None:
+        if ctx.params.get("storage") is not None:
+            return ctx.params["storage"]
+        ctx = ctx.parent
+
+    env_storage = os.environ.get("TFA_STORAGE")
+    if env_storage:
+        return Path(env_storage)
+
+    raise click.ClickException(
+        "TFA_STORAGE environment variable not set. Set it to the path where you "
+        "want to store your TOTP secrets, or pass --storage. Example: "
+        "export TFA_STORAGE=~/.config/tfa/accounts.db"
+    )
+
+
+def get_storage(ctx, storage_path=None):
+    return AccountStorage(get_storage_path(ctx, storage_path))
+
+
 def complete_account_name(ctx, param, incomplete):
-    return [k for k in AccountStorage() if k.startswith(incomplete)]
+    try:
+        path = get_storage_path(ctx)
+    except click.ClickException:
+        return []
+    # Don't create an empty database for a mistyped --storage path. A .json
+    # path is stored in its .db sibling (see AccountStorage).
+    if not path.exists() and not path.with_suffix(".db").exists():
+        return []
+    return [k for k in AccountStorage(path) if k.startswith(incomplete)]
 
 
 @click.group()
 @click.version_option(version=__version__)
-def cli():
+@storage_option
+def cli(storage):
     pass
 
 
 @cli.command(help="Show a TOTP code for a given account.")
 @click.argument("account_name", shell_complete=complete_account_name)
-def code(account_name):
-    storage = AccountStorage()
+@storage_option
+@click.pass_context
+def code(ctx, account_name, storage):
+    storage = get_storage(ctx, storage)
     try:
         account = storage[account_name]
     except KeyError:
@@ -46,9 +92,11 @@ def code(account_name):
     "--issuer",
 )
 @click.option("--force", "-f", is_flag=True)
-def add_account(account_name, secret_key, issuer=None, force=False):
+@storage_option
+@click.pass_context
+def add_account(ctx, account_name, secret_key, issuer=None, force=False, storage=None):
     issuer = issuer or account_name
-    accounts = AccountStorage()
+    accounts = get_storage(ctx, storage)
     if issuer in accounts and not force:
         click.echo(f"Account {issuer!r} already exists. Use --force to overwrite.")
         sys.exit(1)
@@ -64,8 +112,10 @@ def add_account(account_name, secret_key, issuer=None, force=False):
 
 @cli.command(help="Remove an account.", name="remove")
 @click.argument("account_name", shell_complete=complete_account_name)
-def remove_account(account_name):
-    accounts = AccountStorage()
+@storage_option
+@click.pass_context
+def remove_account(ctx, account_name, storage):
+    accounts = get_storage(ctx, storage)
     try:
         del accounts[account_name]
     except KeyError:
@@ -74,15 +124,19 @@ def remove_account(account_name):
 
 
 @cli.command(help="List all accounts.", name="list")
-def list_accounts():
-    for name in AccountStorage():
+@storage_option
+@click.pass_context
+def list_accounts(ctx, storage):
+    for name in get_storage(ctx, storage):
         click.echo(name)
 
 
 @cli.command(help="Display a QR code for an account.")
 @click.argument("account_name", shell_complete=complete_account_name)
-def qr(account_name):
-    storage = AccountStorage()
+@storage_option
+@click.pass_context
+def qr(ctx, account_name, storage):
+    storage = get_storage(ctx, storage)
     try:
         account = storage[account_name]
     except KeyError:
@@ -107,7 +161,9 @@ def qr(account_name):
     "json_file", metavar="FILE", type=click.Path(dir_okay=False, path_type=Path)
 )
 @click.option("--force", "-f", is_flag=True, help="Replace existing accounts")
-def import_accounts(json_file, force):
+@storage_option
+@click.pass_context
+def import_accounts(ctx, json_file, force, storage):
     """Import accounts from a JSON file into the TFA database."""
     try:
         if str(json_file) == "-":
@@ -116,7 +172,7 @@ def import_accounts(json_file, force):
             with json_file.open("r") as f:
                 json_accounts = json.load(f)
 
-        storage = AccountStorage()
+        storage = get_storage(ctx, storage)
 
         imported = 0
         skipped = 0
@@ -173,9 +229,11 @@ def import_accounts(json_file, force):
     required=False,
 )
 @click.option("--force", "-f", is_flag=True, help="Overwrite existing file")
-def export_accounts(json_file, force):
+@storage_option
+@click.pass_context
+def export_accounts(ctx, json_file, force, storage):
     """Export accounts from the TFA database to a JSON file or stdout."""
-    storage = AccountStorage()
+    storage = get_storage(ctx, storage)
     accounts = {}
 
     for name in storage:
