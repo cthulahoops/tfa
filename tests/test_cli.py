@@ -220,6 +220,7 @@ def test_subcommand_storage_overrides_env():
 def test_group_storage_overrides_env():
     runner = CliRunner()
     with runner.isolated_filesystem():
+        runner.invoke(cli, ["add", "envaccount", "JBSWY3DPEHPK3PXP"])
         runner.invoke(cli, ["--storage", "other.db", "add", "a", "JBSWY3DPEHPK3PXP"])
 
         result = runner.invoke(cli, ["--storage", "other.db", "list"])
@@ -259,6 +260,23 @@ def test_completion_uses_group_storage():
         runner.invoke(cli, ["add", "a", "JBSWY3DPEHPK3PXP", "--storage", "a.db"])
 
         assert complete(["--storage", "a.db", "code"], "") == ["a"]
+
+
+def test_completion_prefers_subcommand_storage():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(cli, ["add", "a", "JBSWY3DPEHPK3PXP", "--storage", "a.db"])
+        runner.invoke(cli, ["add", "b", "JBSWY3DPEHPK3PXP", "--storage", "b.db"])
+
+        args = ["--storage", "a.db", "code", "--storage", "b.db"]
+        assert complete(args, "") == ["b"]
+
+
+def test_completion_does_not_create_missing_storage():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        assert complete(["code", "--storage", "typo.db"], "") == []
+        assert not os.path.exists("typo.db")
 
 
 def test_completion_without_storage_returns_nothing(monkeypatch):

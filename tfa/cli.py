@@ -53,10 +53,14 @@ def get_storage(ctx, storage_path=None):
 
 def complete_account_name(ctx, param, incomplete):
     try:
-        storage = get_storage(ctx)
+        path = get_storage_path(ctx)
     except click.ClickException:
         return []
-    return [k for k in storage if k.startswith(incomplete)]
+    # Don't create an empty database for a mistyped --storage path. A .json
+    # path is stored in its .db sibling (see AccountStorage).
+    if not path.exists() and not path.with_suffix(".db").exists():
+        return []
+    return [k for k in AccountStorage(path) if k.startswith(incomplete)]
 
 
 @click.group()
