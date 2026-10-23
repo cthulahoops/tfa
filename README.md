@@ -48,7 +48,15 @@ secrets by setting a path in your shell configuration:
 export TFA_STORAGE=~/.config/tfa/accounts.db
 ```
 
-If TFA_STORAGE is not set, the tool will display an error message and exit.
+For one-off commands, use `--storage` to override `TFA_STORAGE`:
+
+```bash
+tfa --storage ./dev-accounts.db import -
+tfa import --storage ./dev-accounts.db -
+tfa list --storage ./dev-accounts.db
+```
+
+If neither `TFA_STORAGE` nor `--storage` is set, the tool will display an error message and exit.
 
 ## Migrating from JSON
 

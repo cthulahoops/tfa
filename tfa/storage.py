@@ -1,12 +1,10 @@
-import os
-from pathlib import Path
 import click
 import sqlite_utils
 
 
 class AccountStorage:
-    def __init__(self, keyfile=None):
-        self.keyfile = keyfile or get_keyfile()
+    def __init__(self, keyfile):
+        self.keyfile = keyfile
 
         if self.keyfile.suffix == ".json":
             self.db_path = self.keyfile.with_suffix(".db")
@@ -64,16 +62,3 @@ class AccountStorage:
 
     def __iter__(self):
         return (row["name"] for row in self.db["accounts"].rows)
-
-
-def get_keyfile():
-    keyfile = os.environ.get("TFA_STORAGE")
-    if not keyfile:
-        click.echo("Error: TFA_STORAGE environment variable not set.", err=True)
-        click.echo(
-            "Please set it to the path where you want to store your TOTP secrets:",
-            err=True,
-        )
-        click.echo("  export TFA_STORAGE=~/.config/tfa/accounts.db", err=True)
-
-    return Path(keyfile)
