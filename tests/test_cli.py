@@ -1,10 +1,13 @@
 from click.shell_completion import ShellComplete
 from click.testing import CliRunner
-from tfa.cli import cli
+from tfa.cli import cli, make_totp
 
 import json
 import os
+import pyotp
+import qrcode
 import re
+import sqlite_utils
 
 
 os.environ["TFA_STORAGE"] = "./temp_test_accounts.json"
@@ -185,7 +188,13 @@ def test_export_dash_writes_json_to_stdout():
 
         assert result.exit_code == 0
         assert json.loads(result.output) == {
-            "testaccount": {"issuer": "testaccount", "key": "JBSWY3DPEHPK3PXP"}
+            "testaccount": {
+                "issuer": "testaccount",
+                "key": "JBSWY3DPEHPK3PXP",
+                "digits": 6,
+                "period": 30,
+                "algorithm": "SHA1",
+            }
         }
 
 
@@ -283,3 +292,149 @@ def test_completion_without_storage_returns_nothing(monkeypatch):
     monkeypatch.delenv("TFA_STORAGE")
 
     assert complete(["code"], "") == []
+
+
+QR_URI = (
+    "otpauth://totp/Family%20Code?secret=ZUON3IOMBVQSVWVETEAGKNSYKKDVPD6FWBZTQQI%3D"
+    "&digits=8&issuer=TEST%20DO%20NOT%20USE&algorithm=SHA256&period=240"
+)
+
+
+def write_qr(path, data=QR_URI):
+    qrcode.make(data).save(path)
+
+
+def test_add_from_qr_stores_all_parameters():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png")
+
+        result = runner.invoke(cli, ["add", "family", "--qr", "qr.png"])
+
+        assert result.exit_code == 0, result.output
+        expected = pyotp.parse_uri(QR_URI).now()
+        assert result.output == f"{expected}\n"
+        export = json.loads(runner.invoke(cli, ["export"]).output)
+        assert export["family"] == {
+            "issuer": "TEST DO NOT USE",
+            "key": "ZUON3IOMBVQSVWVETEAGKNSYKKDVPD6FWBZTQQI=",
+            "digits": 8,
+            "period": 240,
+            "algorithm": "SHA256",
+        }
+
+
+def test_code_uses_stored_parameters():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png")
+        runner.invoke(cli, ["add", "family", "--qr", "qr.png"])
+
+        result = runner.invoke(cli, ["code", "family"])
+
+        assert result.output == f"{pyotp.parse_uri(QR_URI).now()}\n"
+
+
+def test_add_from_qr_on_stdin():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png")
+        with open("qr.png", "rb") as f:
+            image = f.read()
+
+        result = runner.invoke(cli, ["add", "family", "--qr", "-"], input=image)
+
+        assert result.exit_code == 0, result.output
+
+
+def test_add_from_qr_issuer_option_wins():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png")
+
+        runner.invoke(cli, ["add", "family", "--qr", "qr.png", "--issuer", "Mine"])
+
+        export = json.loads(runner.invoke(cli, ["export"]).output)
+        assert export["family"]["issuer"] == "Mine"
+
+
+def test_add_requires_key_or_qr():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ["add", "family"])
+
+        assert result.exit_code == 2
+        assert "exactly one of SECRET_KEY or --qr" in result.output
+
+
+def test_add_rejects_key_and_qr():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png")
+
+        result = runner.invoke(
+            cli, ["add", "family", "JBSWY3DPEHPK3PXP", "--qr", "qr.png"]
+        )
+
+        assert result.exit_code == 2
+
+
+def test_add_from_qr_without_otpauth_uri():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png", "https://example.com")
+
+        result = runner.invoke(cli, ["add", "family", "--qr", "qr.png"])
+
+        assert result.exit_code == 1
+        assert "No otpauth QR code found" in result.output
+
+
+def test_add_from_qr_not_an_image():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        with open("qr.png", "w") as f:
+            f.write("not an image")
+
+        result = runner.invoke(cli, ["add", "family", "--qr", "qr.png"])
+
+        assert result.exit_code == 1
+        assert "not a recognised image" in result.output
+
+
+def test_qr_round_trips_parameters():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("in.png")
+        runner.invoke(cli, ["add", "family", "--qr", "in.png"])
+        account = json.loads(runner.invoke(cli, ["export"]).output)["family"]
+
+        uri = make_totp(account).provisioning_uri(issuer_name=account["issuer"])
+        assert "period=240" in uri
+        assert "digits=8" in uri
+        assert "algorithm=SHA256" in uri
+
+
+def test_add_duplicate_detected_by_name_not_issuer():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(cli, ["add", "a", "JBSWY3DPEHPK3PXP", "--issuer", "X"])
+
+        result = runner.invoke(cli, ["add", "a", "JBSWY3DPEHPK3PXP", "--issuer", "X"])
+
+        assert result.exit_code == 1
+        assert "already exists" in result.output
+
+
+def test_existing_database_is_migrated():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        db = sqlite_utils.Database("old.db")
+        db["accounts"].insert(
+            {"name": "old", "issuer": "old", "key": "JBSWY3DPEHPK3PXP"}, pk="name"
+        )
+
+        result = runner.invoke(cli, ["--storage", "old.db", "code", "old"])
+
+        assert result.exit_code == 0, result.output
+        assert result.output == f"{pyotp.TOTP('JBSWY3DPEHPK3PXP').now()}\n"

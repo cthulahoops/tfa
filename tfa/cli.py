@@ -1,14 +1,17 @@
 import binascii
 import click
+import hashlib
 import json
 import os
 import pyotp
 import qrcode
 import sys
+import zxingcpp
 
 from pathlib import Path
+from PIL import Image, UnidentifiedImageError
 
-from .storage import AccountStorage
+from .storage import AccountStorage, DEFAULTS
 from importlib.metadata import version
 
 try:
@@ -51,6 +54,51 @@ def get_storage(ctx, storage_path=None):
     return AccountStorage(get_storage_path(ctx, storage_path))
 
 
+def make_totp(account):
+    algorithm = account.get("algorithm", DEFAULTS["algorithm"])
+    if algorithm.upper() not in ("SHA1", "SHA256", "SHA512"):
+        raise ValueError(f"Unsupported algorithm: {algorithm}")
+    return pyotp.TOTP(
+        account["key"],
+        digits=account.get("digits", DEFAULTS["digits"]),
+        interval=account.get("period", DEFAULTS["period"]),
+        digest=getattr(hashlib, algorithm.lower()),
+    )
+
+
+def read_qr(image_file):
+    """Read an otpauth:// QR code image and return (account, issuer)."""
+    try:
+        image = Image.open(image_file)
+    except UnidentifiedImageError:
+        raise click.ClickException(f"{image_file.name} is not a recognised image.")
+
+    uris = [
+        result.text
+        for result in zxingcpp.read_barcodes(image)
+        if result.text.startswith("otpauth://")
+    ]
+    if not uris:
+        raise click.ClickException(f"No otpauth QR code found in {image_file.name}.")
+    if len(uris) > 1:
+        raise click.ClickException(f"Multiple QR codes found in {image_file.name}.")
+
+    try:
+        otp = pyotp.parse_uri(uris[0])
+    except ValueError as error:
+        raise click.ClickException(f"Invalid otpauth URI: {error}")
+    if not isinstance(otp, pyotp.TOTP):
+        raise click.ClickException("Only TOTP QR codes are supported.")
+
+    account = {
+        "key": otp.secret,
+        "digits": otp.digits,
+        "period": otp.interval,
+        "algorithm": otp.digest().name.upper(),
+    }
+    return account, otp.issuer
+
+
 def complete_account_name(ctx, param, incomplete):
     try:
         path = get_storage_path(ctx)
@@ -81,33 +129,56 @@ def code(ctx, account_name, storage):
     except KeyError:
         click.echo(f"Account {account_name!r} does not exist.")
         sys.exit(1)
-    totp = pyotp.TOTP(account["key"])
-    click.echo(f"{totp.now()}")
+    click.echo(f"{make_totp(account).now()}")
 
 
-@cli.command(help="Add a new account.", name="add")
+@cli.command(
+    help=(
+        "Add a new account from SECRET_KEY, or from a QR code image with --qr "
+        "(use '-' to read the image from stdin)."
+    ),
+    name="add",
+)
 @click.argument("account_name")
-@click.argument("secret_key")
+@click.argument("secret_key", required=False)
+@click.option(
+    "--qr",
+    "qr_image",
+    type=click.File("rb"),
+    help="Read the account from an otpauth:// QR code image.",
+)
 @click.option(
     "--issuer",
 )
 @click.option("--force", "-f", is_flag=True)
 @storage_option
 @click.pass_context
-def add_account(ctx, account_name, secret_key, issuer=None, force=False, storage=None):
-    issuer = issuer or account_name
+def add_account(
+    ctx, account_name, secret_key, qr_image=None, issuer=None, force=False, storage=None
+):
+    if (secret_key is None) == (qr_image is None):
+        raise click.UsageError("Provide exactly one of SECRET_KEY or --qr.")
+
+    if qr_image is not None:
+        account, qr_issuer = read_qr(qr_image)
+    else:
+        account, qr_issuer = {"key": secret_key, **DEFAULTS}, None
+    account["issuer"] = issuer or qr_issuer or account_name
+
     accounts = get_storage(ctx, storage)
-    if issuer in accounts and not force:
-        click.echo(f"Account {issuer!r} already exists. Use --force to overwrite.")
+    if account_name in accounts and not force:
+        click.echo(
+            f"Account {account_name!r} already exists. Use --force to overwrite."
+        )
         sys.exit(1)
     try:
-        initial_code = pyotp.TOTP(secret_key).now()
+        initial_code = make_totp(account).now()
         click.echo(f"{initial_code}")
     except binascii.Error as error:
         click.echo(f"Invalid secret key: {error}")
         sys.exit(1)
 
-    accounts[account_name] = {"issuer": issuer, "key": secret_key}
+    accounts[account_name] = account
 
 
 @cli.command(help="Remove an account.", name="remove")
@@ -143,8 +214,7 @@ def qr(ctx, account_name, storage):
         click.echo(f"Account {account_name!r} does not exist.")
         sys.exit(1)
 
-    totp = pyotp.TOTP(account["key"])
-    url = totp.provisioning_uri(issuer_name=account["issuer"])
+    url = make_totp(account).provisioning_uri(issuer_name=account["issuer"])
     qr = qrcode.QRCode()
     qr.add_data(url)
     qr.print_ascii()
@@ -193,8 +263,8 @@ def import_accounts(ctx, json_file, force, storage):
                 details["issuer"] = name
 
             try:
-                pyotp.TOTP(details["key"]).now()
-            except binascii.Error as e:
+                make_totp(details).now()
+            except (binascii.Error, ValueError) as e:
                 click.echo(f"Skipping account with invalid key: {name} ({e})")
                 skipped += 1
                 continue

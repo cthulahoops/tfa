@@ -82,6 +82,12 @@ tfa add <account_name> <secret_key> --issuer "Custom Name"
 
 # Force overwrite existing account
 tfa add <account_name> <secret_key> -f
+
+# From a QR code image (keeps issuer, digits, period and algorithm)
+tfa add <account_name> --qr qr.png
+
+# From a QR code image on stdin, eg. a screenshot on the clipboard
+wl-paste | tfa add <account_name> --qr -
 ```
 
 ### Get TOTP code
