@@ -1,6 +1,8 @@
 import click
 import sqlite_utils
 
+DEFAULTS = {"digits": 6, "period": 30, "algorithm": "SHA1"}
+
 
 class AccountStorage:
     def __init__(self, keyfile):
@@ -33,19 +35,47 @@ class AccountStorage:
 
         if "accounts" not in self.db.table_names():
             self.db["accounts"].create(
-                {"name": str, "issuer": str, "key": str}, pk="name"
+                {
+                    "name": str,
+                    "issuer": str,
+                    "key": str,
+                    "digits": int,
+                    "period": int,
+                    "algorithm": str,
+                },
+                pk="name",
             )
+        else:
+            columns = self.db["accounts"].columns_dict
+            for column, default in DEFAULTS.items():
+                if column not in columns:
+                    self.db["accounts"].add_column(column, type(default))
 
     def __getitem__(self, account_name):
         try:
             account = self.db["accounts"].get(account_name)
         except sqlite_utils.db.NotFoundError:
             raise KeyError(account_name)
-        return {"issuer": account["issuer"], "key": account["key"]}
+        return {
+            "issuer": account["issuer"],
+            "key": account["key"],
+            **{
+                column: account[column] if account[column] is not None else default
+                for column, default in DEFAULTS.items()
+            },
+        }
 
     def __setitem__(self, account_name, account):
         self.db["accounts"].upsert(
-            {"name": account_name, "issuer": account["issuer"], "key": account["key"]},
+            {
+                "name": account_name,
+                "issuer": account["issuer"],
+                "key": account["key"],
+                **{
+                    column: account.get(column, default)
+                    for column, default in DEFAULTS.items()
+                },
+            },
             pk="name",
         )
 
