@@ -1,3 +1,4 @@
+from click.shell_completion import ShellComplete
 from click.testing import CliRunner
 from tfa.cli import cli
 
@@ -201,3 +202,66 @@ def test_import_dash_reads_json_from_stdin():
         assert "Import complete: 1 accounts imported, 0 skipped." in result.output
         list_result = runner.invoke(cli, ["list"])
         assert "testaccount" in list_result.output
+
+
+def test_subcommand_storage_overrides_env():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(cli, ["add", "envaccount", "JBSWY3DPEHPK3PXP"])
+        runner.invoke(
+            cli, ["add", "optaccount", "JBSWY3DPEHPK3PXP", "--storage", "other.db"]
+        )
+
+        result = runner.invoke(cli, ["list", "--storage", "other.db"])
+
+        assert result.output == "optaccount\n"
+
+
+def test_group_storage_overrides_env():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(cli, ["--storage", "other.db", "add", "a", "JBSWY3DPEHPK3PXP"])
+
+        result = runner.invoke(cli, ["--storage", "other.db", "list"])
+
+        assert result.output == "a\n"
+
+
+def test_subcommand_storage_overrides_group_storage():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(cli, ["add", "a", "JBSWY3DPEHPK3PXP", "--storage", "a.db"])
+        runner.invoke(cli, ["add", "b", "JBSWY3DPEHPK3PXP", "--storage", "b.db"])
+
+        result = runner.invoke(cli, ["--storage", "a.db", "list", "--storage", "b.db"])
+
+        assert result.output == "b\n"
+
+
+def test_missing_storage_is_an_error(monkeypatch):
+    monkeypatch.delenv("TFA_STORAGE")
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ["list"])
+
+        assert result.exit_code == 1
+        assert "TFA_STORAGE environment variable not set" in result.output
+
+
+def complete(args, incomplete):
+    completer = ShellComplete(cli, {}, "tfa", "_TFA_COMPLETE")
+    return [item.value for item in completer.get_completions(args, incomplete)]
+
+
+def test_completion_uses_group_storage():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(cli, ["add", "a", "JBSWY3DPEHPK3PXP", "--storage", "a.db"])
+
+        assert complete(["--storage", "a.db", "code"], "") == ["a"]
+
+
+def test_completion_without_storage_returns_nothing(monkeypatch):
+    monkeypatch.delenv("TFA_STORAGE")
+
+    assert complete(["code"], "") == []

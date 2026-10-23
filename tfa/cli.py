@@ -29,12 +29,12 @@ def get_storage_path(ctx, storage_path=None):
     if storage_path is not None:
         return storage_path
 
-    if ctx and "storage" in ctx.params and ctx.params["storage"] is not None:
-        return ctx.params["storage"]
-
-    root = ctx.find_root() if ctx else None
-    if root and root.obj and root.obj.get("storage") is not None:
-        return root.obj["storage"]
+    # Check the subcommand's --storage, then the group's. Uses params rather
+    # than ctx.obj because group callbacks don't run during shell completion.
+    while ctx is not None:
+        if ctx.params.get("storage") is not None:
+            return ctx.params["storage"]
+        ctx = ctx.parent
 
     env_storage = os.environ.get("TFA_STORAGE")
     if env_storage:
@@ -52,20 +52,18 @@ def get_storage(ctx, storage_path=None):
 
 
 def complete_account_name(ctx, param, incomplete):
-    return [k for k in AccountStorage(get_storage_path(ctx)) if k.startswith(incomplete)]
+    try:
+        storage = get_storage(ctx)
+    except click.ClickException:
+        return []
+    return [k for k in storage if k.startswith(incomplete)]
 
 
 @click.group()
 @click.version_option(version=__version__)
-@click.option(
-    "--storage",
-    type=click.Path(dir_okay=False, path_type=Path),
-    help="Path to the account database. Overrides TFA_STORAGE.",
-)
-@click.pass_context
-def cli(ctx, storage):
-    ctx.ensure_object(dict)
-    ctx.obj["storage"] = storage
+@storage_option
+def cli(storage):
+    pass
 
 
 @cli.command(help="Show a TOTP code for a given account.")
