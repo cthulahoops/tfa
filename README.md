@@ -87,7 +87,8 @@ tfa add <account_name> <secret_key> -f
 tfa add <account_name> --qr qr.png
 
 # From a QR code image on stdin, eg. a screenshot on the clipboard
-wl-paste | tfa add <account_name> --qr -
+wl-paste | tfa add <account_name> --qr -                                    # Wayland
+xclip -selection clipboard -t image/png -o | tfa add <account_name> --qr -  # X11
 ```
 
 ### Get TOTP code
