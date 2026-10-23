@@ -5,11 +5,12 @@ import json
 import os
 import pyotp
 import qrcode
+import re
 import sys
 import zxingcpp
 
 from pathlib import Path
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 from .storage import AccountStorage, DEFAULTS
 from importlib.metadata import version
@@ -54,14 +55,25 @@ def get_storage(ctx, storage_path=None):
     return AccountStorage(get_storage_path(ctx, storage_path))
 
 
+def positive_int(account, field):
+    value = account.get(field, DEFAULTS[field])
+    if type(value) is not int or value < 1:
+        raise ValueError(f"{field} must be a positive integer, not {value!r}")
+    return value
+
+
 def make_totp(account):
     algorithm = account.get("algorithm", DEFAULTS["algorithm"])
-    if algorithm.upper() not in ("SHA1", "SHA256", "SHA512"):
-        raise ValueError(f"Unsupported algorithm: {algorithm}")
+    if not isinstance(algorithm, str) or algorithm.upper() not in (
+        "SHA1",
+        "SHA256",
+        "SHA512",
+    ):
+        raise ValueError(f"Unsupported algorithm: {algorithm!r}")
     return pyotp.TOTP(
         account["key"],
-        digits=account.get("digits", DEFAULTS["digits"]),
-        interval=account.get("period", DEFAULTS["period"]),
+        digits=positive_int(account, "digits"),
+        interval=positive_int(account, "period"),
         digest=getattr(hashlib, algorithm.lower()),
     )
 
@@ -70,8 +82,9 @@ def read_qr(image_file):
     """Read an otpauth:// QR code image and return (account, issuer)."""
     try:
         image = Image.open(image_file)
-    except UnidentifiedImageError:
-        raise click.ClickException(f"{image_file.name} is not a recognised image.")
+        image.load()
+    except OSError:
+        raise click.ClickException(f"{image_file.name} is not a readable image.")
 
     uris = [
         result.text
@@ -83,12 +96,21 @@ def read_qr(image_file):
     if len(uris) > 1:
         raise click.ClickException(f"Multiple QR codes found in {image_file.name}.")
 
+    # The spec says uppercase, but some issuers send algorithm=sha256.
+    uri = re.sub(
+        r"([?&]algorithm=)([^&]*)",
+        lambda match: match[1] + match[2].upper(),
+        uris[0],
+        flags=re.IGNORECASE,
+    )
     try:
-        otp = pyotp.parse_uri(uris[0])
+        otp = pyotp.parse_uri(uri)
     except ValueError as error:
         raise click.ClickException(f"Invalid otpauth URI: {error}")
-    if not isinstance(otp, pyotp.TOTP):
-        raise click.ClickException("Only TOTP QR codes are supported.")
+    # Exact type: pyotp's Steam subclass would be stored as plain TOTP and give
+    # the wrong codes.
+    if type(otp) is not pyotp.TOTP:
+        raise click.ClickException("Only standard TOTP QR codes are supported.")
 
     account = {
         "key": otp.secret,
@@ -176,6 +198,9 @@ def add_account(
         click.echo(f"{initial_code}")
     except binascii.Error as error:
         click.echo(f"Invalid secret key: {error}")
+        sys.exit(1)
+    except ValueError as error:
+        click.echo(f"Invalid account: {error}")
         sys.exit(1)
 
     accounts[account_name] = account
@@ -265,7 +290,7 @@ def import_accounts(ctx, json_file, force, storage):
             try:
                 make_totp(details).now()
             except (binascii.Error, ValueError) as e:
-                click.echo(f"Skipping account with invalid key: {name} ({e})")
+                click.echo(f"Skipping invalid account: {name} ({e})")
                 skipped += 1
                 continue
 

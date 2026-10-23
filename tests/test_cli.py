@@ -5,6 +5,7 @@ from tfa.cli import cli, make_totp
 import json
 import os
 import pyotp
+import pytest
 import qrcode
 import re
 import sqlite_utils
@@ -399,7 +400,7 @@ def test_add_from_qr_not_an_image():
         result = runner.invoke(cli, ["add", "family", "--qr", "qr.png"])
 
         assert result.exit_code == 1
-        assert "not a recognised image" in result.output
+        assert "not a readable image" in result.output
 
 
 def test_qr_round_trips_parameters():
@@ -438,3 +439,82 @@ def test_existing_database_is_migrated():
 
         assert result.exit_code == 0, result.output
         assert result.output == f"{pyotp.TOTP('JBSWY3DPEHPK3PXP').now()}\n"
+
+
+def test_add_from_qr_truncated_image():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png")
+        with open("qr.png", "rb") as f:
+            image = f.read()
+        with open("qr.png", "wb") as f:
+            f.write(image[: len(image) // 2])
+
+        result = runner.invoke(cli, ["add", "family", "--qr", "qr.png"])
+
+        assert result.exit_code == 1
+        assert "not a readable image" in result.output
+
+
+def test_add_from_qr_zero_period():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png", "otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&period=0")
+
+        result = runner.invoke(cli, ["add", "family", "--qr", "qr.png"])
+
+        assert result.exit_code == 1
+        assert "period must be a positive integer" in result.output
+        assert runner.invoke(cli, ["list"]).output == ""
+
+
+def test_add_from_qr_rejects_steam():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png", "otpauth://totp/a?secret=JBSWY3DPEHPK3PXP&encoder=steam")
+
+        result = runner.invoke(cli, ["add", "family", "--qr", "qr.png"])
+
+        assert result.exit_code == 1
+        assert "Only standard TOTP" in result.output
+
+
+def test_add_from_qr_lowercase_algorithm():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png", QR_URI.replace("SHA256", "sha256"))
+
+        result = runner.invoke(cli, ["add", "family", "--qr", "qr.png"])
+
+        assert result.exit_code == 0, result.output
+        assert result.output == f"{pyotp.parse_uri(QR_URI).now()}\n"
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"digits": "8"},
+        {"digits": None},
+        {"period": "60"},
+        {"period": 0},
+        {"period": 30.5},
+        {"algorithm": None},
+        {"algorithm": 5},
+        {"algorithm": "MD5"},
+    ],
+)
+def test_import_skips_invalid_parameters(fields):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        payload = json.dumps(
+            {
+                "bad": {"key": "JBSWY3DPEHPK3PXP", **fields},
+                "good": {"key": "JBSWY3DPEHPK3PXP"},
+            }
+        )
+
+        result = runner.invoke(cli, ["import", "-"], input=payload)
+
+        assert result.exit_code == 0, result.output
+        assert "Skipping invalid account: bad" in result.output
+        assert runner.invoke(cli, ["list"]).output == "good\n"
