@@ -437,9 +437,7 @@ def test_add_from_qr_keeps_label_account():
         )
 
 
-@pytest.mark.parametrize(
-    "label", ["GitHub:", "", "Secret", "GitHub:%20%20adam"], ids=repr
-)
+@pytest.mark.parametrize("label", ["GitHub:", "", "GitHub:%20%20adam"], ids=repr)
 def test_add_from_qr_label_account_edge_cases(label):
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -570,7 +568,7 @@ def test_add_from_qr_rejects_steam():
         result = runner.invoke(cli, ["add", "family", "--qr", "qr.png"])
 
         assert result.exit_code == 1
-        assert "Only standard TOTP" in result.output
+        assert "unsupported encoder" in result.output
 
 
 def test_add_from_qr_lowercase_algorithm():

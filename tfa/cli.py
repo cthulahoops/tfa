@@ -5,13 +5,13 @@ import json
 import os
 import pyotp
 import qrcode
-import re
 import sys
 import zxingcpp
 
 from pathlib import Path
 from PIL import Image
 
+from . import otpauth
 from .storage import AccountStorage, DEFAULTS
 from importlib.metadata import version
 
@@ -86,10 +86,7 @@ def provisioning_uri(account_name, account):
 
 
 def read_qr(image_file):
-    """Read an otpauth:// QR code image and return (account, issuer).
-
-    The account dict includes the account name from the URI label, if any.
-    """
+    """Read an otpauth:// QR code image and return (account, issuer)."""
     try:
         image = Image.open(image_file)
         image.load()
@@ -99,40 +96,17 @@ def read_qr(image_file):
     uris = [
         result.text
         for result in zxingcpp.read_barcodes(image)
-        if result.text.startswith("otpauth://")
+        if otpauth.is_otpauth_uri(result.text)
     ]
     if not uris:
         raise click.ClickException(f"No otpauth QR code found in {image_file.name}.")
     if len(uris) > 1:
         raise click.ClickException(f"Multiple QR codes found in {image_file.name}.")
 
-    # The spec says uppercase, but some issuers send algorithm=sha256.
-    uri = re.sub(
-        r"([?&]algorithm=)([^&]*)",
-        lambda match: match[1] + match[2].upper(),
-        uris[0],
-        flags=re.IGNORECASE,
-    )
     try:
-        otp = pyotp.parse_uri(uri)
+        return otpauth.parse_uri(uris[0])
     except ValueError as error:
         raise click.ClickException(f"Invalid otpauth URI: {error}")
-    # Exact type: pyotp's Steam subclass would be stored as plain TOTP and give
-    # the wrong codes.
-    if type(otp) is not pyotp.TOTP:
-        raise click.ClickException("Only standard TOTP QR codes are supported.")
-
-    # pyotp fills in "Secret" when the label has no account name.
-    label_account = otp.name.strip() if otp.name != "Secret" else ""
-
-    account = {
-        "account": label_account or None,
-        "key": otp.secret,
-        "digits": otp.digits,
-        "period": otp.interval,
-        "algorithm": otp.digest().name.upper(),
-    }
-    return account, otp.issuer
 
 
 def complete_account_name(ctx, param, incomplete):
