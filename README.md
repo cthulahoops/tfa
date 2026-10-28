@@ -87,6 +87,7 @@ tfa add <account_name> <secret_key> --issuer "GitHub" --account "me@example.com"
 tfa add <account_name> <secret_key> -f
 
 # From a QR code image (keeps issuer, account, digits, period and algorithm)
+# Accepts otpauth:// and apple-otpauth:// TOTP codes
 tfa add <account_name> --qr qr.png
 
 # From a QR code image on stdin, eg. a screenshot on the clipboard
