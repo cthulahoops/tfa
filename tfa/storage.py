@@ -38,6 +38,7 @@ class AccountStorage:
                 {
                     "name": str,
                     "issuer": str,
+                    "account": str,
                     "key": str,
                     "digits": int,
                     "period": int,
@@ -47,6 +48,8 @@ class AccountStorage:
             )
         else:
             columns = self.db["accounts"].columns_dict
+            if "account" not in columns:
+                self.db["accounts"].add_column("account", str)
             for column, default in DEFAULTS.items():
                 if column not in columns:
                     self.db["accounts"].add_column(column, type(default))
@@ -58,6 +61,7 @@ class AccountStorage:
             raise KeyError(account_name)
         return {
             "issuer": account["issuer"],
+            "account": account["account"],
             "key": account["key"],
             **{
                 column: account[column] if account[column] is not None else default
@@ -70,6 +74,7 @@ class AccountStorage:
             {
                 "name": account_name,
                 "issuer": account["issuer"],
+                "account": account.get("account"),
                 "key": account["key"],
                 **{
                     column: account.get(column, default)

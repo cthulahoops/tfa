@@ -1,6 +1,6 @@
 from click.shell_completion import ShellComplete
 from click.testing import CliRunner
-from tfa.cli import cli, make_totp
+from tfa.cli import cli, provisioning_uri
 
 import json
 import os
@@ -191,6 +191,7 @@ def test_export_dash_writes_json_to_stdout():
         assert json.loads(result.output) == {
             "testaccount": {
                 "issuer": "testaccount",
+                "account": None,
                 "key": "JBSWY3DPEHPK3PXP",
                 "digits": 6,
                 "period": 30,
@@ -318,6 +319,7 @@ def test_add_from_qr_stores_all_parameters():
         export = json.loads(runner.invoke(cli, ["export"]).output)
         assert export["family"] == {
             "issuer": "TEST DO NOT USE",
+            "account": "Example",
             "key": "CHIVQ7QDIO7ZHFKA6BWMIU4BVCIA3AKYJDX2TQQ=",
             "digits": 8,
             "period": 240,
@@ -410,10 +412,101 @@ def test_qr_round_trips_parameters():
         runner.invoke(cli, ["add", "family", "--qr", "in.png"])
         account = json.loads(runner.invoke(cli, ["export"]).output)["family"]
 
-        uri = make_totp(account).provisioning_uri(issuer_name=account["issuer"])
+        uri = provisioning_uri("family", account)
+        assert uri.startswith("otpauth://totp/TEST%20DO%20NOT%20USE:Example?")
         assert "period=240" in uri
         assert "digits=8" in uri
         assert "algorithm=SHA256" in uri
+
+
+def test_add_from_qr_keeps_label_account():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr(
+            "qr.png",
+            "otpauth://totp/GitHub:adam%40example.com?secret=JBSWY3DPEHPK3PXP"
+            "&issuer=GitHub",
+        )
+        runner.invoke(cli, ["add", "github", "--qr", "qr.png"])
+
+        account = json.loads(runner.invoke(cli, ["export"]).output)["github"]
+
+        assert account["account"] == "adam@example.com"
+        assert provisioning_uri("github", account).startswith(
+            "otpauth://totp/GitHub:adam%40example.com?"
+        )
+
+
+@pytest.mark.parametrize(
+    "label", ["GitHub:", "", "Secret", "GitHub:%20%20adam"], ids=repr
+)
+def test_add_from_qr_label_account_edge_cases(label):
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png", f"otpauth://totp/{label}?secret=JBSWY3DPEHPK3PXP")
+        runner.invoke(cli, ["add", "github", "--qr", "qr.png"])
+
+        account = json.loads(runner.invoke(cli, ["export"]).output)["github"]
+
+        assert account["account"] == ("adam" if "adam" in label else None)
+
+
+def test_add_account_option_wins_over_qr_label():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png")
+
+        runner.invoke(cli, ["add", "family", "--qr", "qr.png", "--account", "me"])
+
+        export = json.loads(runner.invoke(cli, ["export"]).output)
+        assert export["family"]["account"] == "me"
+
+
+def test_add_with_secret_and_account():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(
+            cli,
+            [
+                "add",
+                "github",
+                "JBSWY3DPEHPK3PXP",
+                "--issuer",
+                "GitHub",
+                "--account",
+                "a@b.c",
+            ],
+        )
+
+        account = json.loads(runner.invoke(cli, ["export"]).output)["github"]
+
+        assert provisioning_uri("github", account).startswith(
+            "otpauth://totp/GitHub:a%40b.c?"
+        )
+
+
+def test_qr_label_falls_back_to_account_name():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        runner.invoke(cli, ["add", "github", "JBSWY3DPEHPK3PXP", "--issuer", "GitHub"])
+
+        account = json.loads(runner.invoke(cli, ["export"]).output)["github"]
+
+        assert account["account"] is None
+        assert provisioning_uri("github", account).startswith(
+            "otpauth://totp/GitHub:github?"
+        )
+
+
+def test_import_keeps_label_account():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        payload = json.dumps({"github": {"key": "JBSWY3DPEHPK3PXP", "account": "me"}})
+
+        runner.invoke(cli, ["import", "-"], input=payload)
+
+        export = json.loads(runner.invoke(cli, ["export"]).output)
+        assert export["github"]["account"] == "me"
 
 
 def test_add_duplicate_detected_by_name_not_issuer():
@@ -439,6 +532,7 @@ def test_existing_database_is_migrated():
 
         assert result.exit_code == 0, result.output
         assert result.output == f"{pyotp.TOTP('JBSWY3DPEHPK3PXP').now()}\n"
+        assert "account" in db["accounts"].columns_dict
 
 
 def test_add_from_qr_truncated_image():
