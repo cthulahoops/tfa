@@ -80,10 +80,13 @@ tfa add <account_name> <secret_key>
 # With custom issuer name
 tfa add <account_name> <secret_key> --issuer "Custom Name"
 
+# With the account shown by authenticator apps, eg. your login
+tfa add <account_name> <secret_key> --issuer "GitHub" --account "me@example.com"
+
 # Force overwrite existing account
 tfa add <account_name> <secret_key> -f
 
-# From a QR code image (keeps issuer, digits, period and algorithm)
+# From a QR code image (keeps issuer, account, digits, period and algorithm)
 tfa add <account_name> --qr qr.png
 
 # From a QR code image on stdin, eg. a screenshot on the clipboard
@@ -107,7 +110,8 @@ tfa remove <account_name>
 ```
 
 ### Generate QR Code
-Generate a QR code to scan with other authenticator apps:
+Generate a QR code to scan with other authenticator apps. It is labelled with the issuer and
+the stored account (or the tfa account name if no account was stored):
 
 ```bash
 tfa qr <account_name>

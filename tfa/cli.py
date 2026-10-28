@@ -78,8 +78,18 @@ def make_totp(account):
     )
 
 
+def provisioning_uri(account_name, account):
+    """Build the otpauth:// URI that `tfa qr` shows for an account."""
+    return make_totp(account).provisioning_uri(
+        name=account.get("account") or account_name, issuer_name=account["issuer"]
+    )
+
+
 def read_qr(image_file):
-    """Read an otpauth:// QR code image and return (account, issuer)."""
+    """Read an otpauth:// QR code image and return (account, issuer).
+
+    The account dict includes the account name from the URI label, if any.
+    """
     try:
         image = Image.open(image_file)
         image.load()
@@ -112,7 +122,11 @@ def read_qr(image_file):
     if type(otp) is not pyotp.TOTP:
         raise click.ClickException("Only standard TOTP QR codes are supported.")
 
+    # pyotp fills in "Secret" when the label has no account name.
+    label_account = otp.name.strip() if otp.name != "Secret" else ""
+
     account = {
+        "account": label_account or None,
         "key": otp.secret,
         "digits": otp.digits,
         "period": otp.interval,
@@ -172,11 +186,23 @@ def code(ctx, account_name, storage):
 @click.option(
     "--issuer",
 )
+@click.option(
+    "--account",
+    "label_account",
+    help="Account shown by authenticator apps, eg. an email address.",
+)
 @click.option("--force", "-f", is_flag=True)
 @storage_option
 @click.pass_context
 def add_account(
-    ctx, account_name, secret_key, qr_image=None, issuer=None, force=False, storage=None
+    ctx,
+    account_name,
+    secret_key,
+    qr_image=None,
+    issuer=None,
+    label_account=None,
+    force=False,
+    storage=None,
 ):
     if (secret_key is None) == (qr_image is None):
         raise click.UsageError("Provide exactly one of SECRET_KEY or --qr.")
@@ -186,6 +212,7 @@ def add_account(
     else:
         account, qr_issuer = {"key": secret_key, **DEFAULTS}, None
     account["issuer"] = issuer or qr_issuer or account_name
+    account["account"] = label_account or account.get("account")
 
     accounts = get_storage(ctx, storage)
     if account_name in accounts and not force:
@@ -239,9 +266,8 @@ def qr(ctx, account_name, storage):
         click.echo(f"Account {account_name!r} does not exist.")
         sys.exit(1)
 
-    url = make_totp(account).provisioning_uri(issuer_name=account["issuer"])
     qr = qrcode.QRCode()
-    qr.add_data(url)
+    qr.add_data(provisioning_uri(account_name, account))
     qr.print_ascii()
 
 
