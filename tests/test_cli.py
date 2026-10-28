@@ -361,6 +361,63 @@ def test_add_from_qr_issuer_option_wins():
         assert export["family"]["issuer"] == "Mine"
 
 
+def test_add_from_qr_defaults_name_to_issuer():
+    runner = CliRunner(mix_stderr=False)
+    with runner.isolated_filesystem():
+        write_qr("qr.png")
+
+        result = runner.invoke(cli, ["add", "--qr", "qr.png"])
+
+        assert result.exit_code == 0, result.output
+        assert result.stdout == f"{pyotp.parse_uri(QR_URI).now()}\n"
+        assert "Using account name 'test-do-not-use'" in result.stderr
+        assert runner.invoke(cli, ["list"]).stdout == "test-do-not-use\n"
+
+
+def test_add_from_qr_defaults_name_to_issuer_option():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png")
+
+        runner.invoke(cli, ["add", "--qr", "qr.png", "--issuer", "My  Bank"])
+
+        assert runner.invoke(cli, ["list"]).output == "my-bank\n"
+
+
+def test_add_from_qr_defaults_name_to_label_account():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png", "otpauth://totp/Alice%40Example.com?secret=JBSWY3DPEHPK3PXP")
+
+        runner.invoke(cli, ["add", "--qr", "qr.png", "--issuer", "  "])
+
+        assert runner.invoke(cli, ["list"]).output == "Alice@Example.com\n"
+
+
+def test_add_from_qr_without_any_name():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png", "otpauth://totp/?secret=JBSWY3DPEHPK3PXP")
+
+        result = runner.invoke(cli, ["add", "--qr", "qr.png"])
+
+        assert result.exit_code == 2
+        assert "give an ACCOUNT_NAME" in result.output
+        assert runner.invoke(cli, ["list"]).output == ""
+
+
+def test_add_from_qr_default_name_respects_existing():
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        write_qr("qr.png")
+        runner.invoke(cli, ["add", "--qr", "qr.png"])
+
+        result = runner.invoke(cli, ["add", "--qr", "qr.png"])
+
+        assert result.exit_code == 1
+        assert "already exists" in result.output
+
+
 def test_add_requires_key_or_qr():
     runner = CliRunner()
     with runner.isolated_filesystem():

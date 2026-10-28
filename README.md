@@ -90,6 +90,9 @@ tfa add <account_name> <secret_key> -f
 # Accepts otpauth:// and apple-otpauth:// TOTP codes
 tfa add <account_name> --qr qr.png
 
+# Without a name, the account is named after the QR code's issuer, eg. "example-corp"
+tfa add --qr qr.png
+
 # From a QR code image on stdin, eg. a screenshot on the clipboard
 wl-paste | tfa add <account_name> --qr -                                    # Wayland
 xclip -selection clipboard -t image/png -o | tfa add <account_name> --qr -  # X11

@@ -5,6 +5,7 @@ import json
 import os
 import pyotp
 import qrcode
+import re
 import sys
 import zxingcpp
 
@@ -85,6 +86,13 @@ def provisioning_uri(account_name, account):
     )
 
 
+def default_account_name(issuer):
+    """Turn an issuer like "Example Corp" into a name like "example-corp"."""
+    if not issuer:
+        return None
+    return re.sub(r"\s+", "-", issuer.lower())
+
+
 def read_qr(image_file):
     """Read an otpauth:// QR code image and return (account, issuer)."""
     try:
@@ -144,12 +152,14 @@ def code(ctx, account_name, storage):
 
 @cli.command(
     help=(
-        "Add a new account from SECRET_KEY, or from a QR code image with --qr "
-        "(use '-' to read the image from stdin)."
+        "Add a new account ACCOUNT_NAME from SECRET_KEY, or from a QR code image "
+        "with --qr (use '-' to read the image from stdin). With --qr, "
+        "ACCOUNT_NAME is optional and defaults to the issuer, lower-cased with "
+        "spaces as hyphens (eg. 'example-corp'), or else the account."
     ),
     name="add",
 )
-@click.argument("account_name")
+@click.argument("account_name", required=False)
 @click.argument("secret_key", required=False)
 @click.option(
     "--qr",
@@ -185,8 +195,17 @@ def add_account(
         account, qr_issuer = read_qr(qr_image)
     else:
         account, qr_issuer = {"key": secret_key, **DEFAULTS}, None
-    account["issuer"] = issuer or qr_issuer or account_name
-    account["account"] = label_account or account.get("account")
+
+    account["issuer"] = (issuer or "").strip() or qr_issuer
+    account["account"] = (label_account or "").strip() or account.get("account")
+    if account_name is None:
+        account_name = default_account_name(account["issuer"]) or account["account"]
+        if not account_name:
+            raise click.UsageError(
+                "The QR code has no issuer or account, so give an ACCOUNT_NAME."
+            )
+        click.echo(f"Using account name {account_name!r}", err=True)
+    account["issuer"] = account["issuer"] or account_name
 
     accounts = get_storage(ctx, storage)
     if account_name in accounts and not force:
